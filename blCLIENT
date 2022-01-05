@@ -1,0 +1,174 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+#define INLED 2
+
+BLEServer *pServer;
+BLEService *pService;
+BLECharacteristic *pCharacteristic;
+
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h> 
+#endif
+
+#define PIN_barre_D 1 
+#define PIN_barre_G 22
+#define PIN_barre_M 23
+
+#define NUMPIXELS 16
+
+Adafruit_NeoPixel barre_D(NUMPIXELS, PIN_barre_D, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel barre_G(NUMPIXELS, PIN_barre_G, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel barre_M(NUMPIXELS, PIN_barre_M, NEO_GRB + NEO_KHZ800);
+
+int timeToWaitLED = 0;
+int LED_active = 0;
+
+#define DELAYVAL 50
+int timeToWaitBarre = 0;
+int barre_Activate_G = 0;
+int barre_Activate_D = 0;
+int barre_Activate_M = 0;
+
+int current_i=0;
+
+int INTENSITY=255;
+
+
+void setup()
+{
+  pinMode(INLED, OUTPUT);
+  Serial.begin(115200);
+  barre_D.begin(); 
+  barre_G.begin();
+  barre_M.begin();
+  Serial.println("Starting BLE Server!");
+
+  BLEDevice::init("ESP32-BLE-Server");
+  pServer = BLEDevice::createServer();
+  pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+                                         CHARACTERISTIC_UUID,
+                                         BLECharacteristic::PROPERTY_READ |
+                                         BLECharacteristic::PROPERTY_WRITE
+                                       );
+
+  
+  /* BLEServer *pServer = BLEDevice::createServer();
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+                                         CHARACTERISTIC_UUID,
+                                         BLECharacteristic::PROPERTY_READ |
+                                         BLECharacteristic::PROPERTY_WRITE
+                                       );*/
+
+  pCharacteristic->setValue("No_info");
+  pService->start();
+  //BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+  //pAdvertising->start();
+  Serial.println("Characteristic defined! Now you can read it in the Client!");
+  barre_G.clear();
+  barre_D.clear();
+  barre_M.clear();
+}
+
+void loop()
+{
+  std::string value = pCharacteristic->getValue();
+
+  if (strcmp (value.c_str(),"No_info")==0){
+    if (millis()>timeToWaitLED){
+      timeToWaitLED=millis()+200;
+      LED_active=1-LED_active;
+      if (LED_active==1){
+        digitalWrite(INLED, HIGH);
+      }else{
+        digitalWrite(INLED, LOW);
+      }
+    }
+  }else{
+    if (millis()>timeToWaitLED){
+      
+      LED_active=1-LED_active;
+      if (LED_active==1){
+        digitalWrite(INLED, HIGH);
+        timeToWaitLED=millis()+1000;
+      }else{
+        digitalWrite(INLED, LOW);
+        timeToWaitLED=millis()+200;
+      }
+    }
+  }
+
+  if (strcmp (value.c_str(),"D0")==0){
+    barre_D.clear();
+    current_i=0;
+  } else if (strcmp (value.c_str(),"G0")==0){
+    current_i=0;
+    barre_G.clear();
+  } else if (strcmp (value.c_str(),"M0")==0){
+    current_i=0;
+    barre_M.clear();
+  }
+  
+  if (millis()>timeToWaitBarre){
+
+    timeToWaitBarre=millis()+DELAYVAL;
+    current_i+=1;
+    if (current_i>NUMPIXELS*2){
+      current_i=-1;
+    }
+  }
+  if (strcmp (value.c_str(),"D1") == 0){
+    barre_G.clear();
+    barre_M.clear();
+    if (current_i==-1){
+      barre_D.clear();
+    }else if (current_i<NUMPIXELS){
+      barre_D.setPixelColor(current_i, barre_D.Color(INTENSITY, INTENSITY, 0));
+    }else{
+      barre_D.setPixelColor(current_i-NUMPIXELS, barre_D.Color(0, 0, 0));
+    }
+   }
+
+   if (strcmp (value.c_str(),"G1") == 0){
+    barre_D.clear();
+    barre_M.clear();
+    if (current_i==-1){
+      barre_G.clear();
+    }else if (current_i<NUMPIXELS){
+      barre_G.setPixelColor(current_i, barre_G.Color(INTENSITY, INTENSITY, 0));
+    }else{
+      barre_G.setPixelColor(current_i-NUMPIXELS, barre_G.Color(0, 0, 0));
+    }
+   }
+
+   if (strcmp (value.c_str(),"M1") == 0){
+    barre_D.clear();
+    barre_G.clear();
+    if (current_i==-1){
+      barre_M.clear();
+    }else if (current_i<NUMPIXELS){
+      barre_M.setPixelColor(current_i, barre_M.Color(INTENSITY, INTENSITY, 0));
+    }else{
+      barre_M.setPixelColor(current_i-NUMPIXELS, barre_M.Color(0, 0, 0));
+    }
+   }
+   
+  barre_D.show();   
+  barre_G.show(); 
+  barre_M.show();
+  Serial.print("The new characteristic value is: ");
+  Serial.println(value.c_str());
+}
